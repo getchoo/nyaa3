@@ -4,6 +4,7 @@
 {
   buildDeps,
   isStatic,
+  mkBuilder,
   nimBuild,
   pkgs,
 }: rec {
@@ -14,7 +15,7 @@
     propagatedBuildInputs = let
       git = pkgs.git.override {doInstallCheck = false;};
     in
-      (with pkgs; [libarchive shadow openssl])
+      (with pkgs; [git libarchive shadow gnutar gzip openssl])
       ++ (
         if isStatic
         then [git]
@@ -49,8 +50,18 @@
   kreastrap = nimBuild rec {
     name = "kreastrap";
     nativeBuildInputs = with buildDeps; [cligen libsha];
-    propagatedBuildInputs = [purr];
+    propagatedBuildInputs = [purr pkgs.su];
+    extraInstallPhase = ''
+      cp -r ${../src/kreastrap/arch} $out/bin/arch
+      cp -r ${../src/kreastrap/overlay} $out/bin/overlay
+    '';
   };
+
+  # ------------------------------------------------------------------------------------------------
+
+  rootfs-nocc = mkBuilder "nocc" kreastrap;
+  rootfs-builder = mkBuilder "builder" kreastrap;
+  rootfs-server = mkBuilder "server" kreastrap;
 
   # ------------------------------------------------------------------------------------------------
 

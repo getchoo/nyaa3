@@ -76,6 +76,7 @@
     version ? inputs.version,
     nativeBuildInputs ? [],
     propagatedBuildInputs ? [pkgs.openssl],
+    extraInstallPhase ? "",
   }: let
     # ------------------------------------------------------------------------------------------------
     inherit (builtins) catAttrs concatStringsSep hasAttr;
@@ -112,16 +113,72 @@
       nativeBuildInputs = [nim] ++ nat;
 
       buildPhase = ''
-        nim compile -d:release \
+        nim compile \
           --threads:on -d:ssl --nimcache:$TMPDIR \
           ${buildArgs} \
           -o=./out/${pname} ./src/${pname}/${pname}.nim
       '';
 
-      installPhase = ''
-        mkdir -p $out/bin
-        cp out/${pname} $out/bin/
+      installPhase =
+        ''
+          mkdir -p $out/bin
+          cp out/${pname} $out/bin/
+        ''
+        + extraInstallPhase;
+    };
+
+  mkBuilder = type: kreastrap: let
+    inherit (pkgs.dockerTools) binSh buildLayeredImage caCertificates shadowSetup;
+    inherit (pkgs) buildEnv coreutils git gnutar gzip libarchive shadow sudo;
+    script = let
+      inherit (pkgs) writeShellScript;
+      arch =
+        if pkgs.stdenv.isx86_64
+        then "amd64"
+        else "aarch64";
+    in
+      writeShellScript "build-${type}-script" ''
+        #!/bin/sh
+        set -e
+
+        ${shadowSetup}
+        useradd _kpkg
+        whoami
+        /bin/sh
+
+        mkdir -p /result /out
+        mkdir -p /etc
+        mkdir -p /var/cache/kpkg
+        mkdir -p /usr/{bin,lib}
+        mkdir -p /home
+        mkdir -p /boot
+        mkdir -p /media
+        mkdir -p /root
+        mkdir -p /srv
+        mkdir -p /dev
+        mkdir -p /opt
+        mkdir -p /proc
+        mkdir -p /sys
+        mkdir -p /tmp
+
+        ${kreastrap}/bin/kreastrap rootfs --buildType="${type}" --arch="${arch}"
+        tar -czvf /result/rootfs-"${type}"-"${version}"-"${arch}".tar.gz /out/*
       '';
+    files = pkgs.buildEnv {
+      name = "files";
+      paths = [binSh coreutils caCertificates git gnutar gzip libarchive shadow sudo];
+    };
+  in
+    buildLayeredImage {
+      name = "rootfs-${type}-builder";
+      tag = "latest";
+      contents = [files];
+      config = {
+        Cmd = ["${script}"];
+        Volumes = {
+          "/result" = {};
+        };
+      };
     };
 in
-  import ./packages.nix {inherit buildDeps isStatic nimBuild pkgs;}
+  import ./packages.nix {inherit buildDeps isStatic mkBuilder nimBuild pkgs;}

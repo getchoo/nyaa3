@@ -100,15 +100,16 @@ proc builder(package: string, destdir: string,
             raise
 
     let folder = absolutePath(execProcess(
-            "su -s /bin/sh _kpkg -c \"dirname $(bsdtar -tzf "&filename&" 2>/dev/null | head -2 | tail -1 )\"")).splitWhitespace.filterit(
+            "sudo -u _kpkg \"dirname $(bsdtar -tzf "&filename&" 2>/dev/null | head -2 | tail -1 )\"")).splitWhitespace.filterit(
             it.len != 0)
 
     if existsPrepare != 0:
-        discard execProcess("su -s /bin/sh _kpkg -c 'bsdtar -xvf "&filename&"'")
+        discard execProcess("sudo -u _kpkg bsdtar -xvf "&filename&"'")
         if pkg.sources.split(";").len == 1:
+            echo ""&folder
             setCurrentDir(folder[0])
     else:
-        assert execShellCmd("su -s /bin/sh _kpkg -c '. "&path&"/run"&" && prepare'") ==
+        assert execShellCmd("sudo -u _kpkg '. "&path&"/run"&" && prepare'") ==
                 0, "prepare failed"
 
     var cmd: int
@@ -116,17 +117,17 @@ proc builder(package: string, destdir: string,
 
     if pkg.sources.split(";").len == 1:
         if existsPrepare == 0:
-            cmd = execShellCmd("su -s /bin/sh _kpkg -c '. "&path&"/run"&" && export CC="&getConfigValue(
+            cmd = execShellCmd("sudo -u _kpkg '. "&path&"/run"&" && export CC="&getConfigValue(
                     "Options", "cc")&" && build'")
             cmd2 = execCmdEx(". "&path&"/run"&" && export DESTDIR="&root&" && export ROOT=$DESTDIR && install")
         else:
-            cmd = execShellCmd("su -s /bin/sh _kpkg -c 'cd "&folder[
+            cmd = execShellCmd("sudo -u _kpkg cd "&folder[
                     0]&" && . "&path&"/run"&" && export CC="&getConfigValue(
                     "Options", "cc")&" && build'")
             cmd2 = execCmdEx(". "&path&"/run"&" && export DESTDIR="&root&" && export ROOT=$DESTDIR && install",
                     workingDir = folder[0])
     else:
-        cmd = execShellCmd("su -s /bin/sh _kpkg -c '. "&path&"/run"&" && export CC="&getConfigValue(
+        cmd = execShellCmd("sudo -u _kpkg '. "&path&"/run"&" && export CC="&getConfigValue(
                 "Options", "cc")&" && build'")
         cmd2 = execCmdEx(". "&path&"/run"&" && export DESTDIR="&root&" && export ROOT=$DESTDIR && install")
 
@@ -145,7 +146,7 @@ proc builder(package: string, destdir: string,
         tarball)))&"  "&tarball)
 
 
-    # Install package to root aswell so dependency errors doesnt happen
+    # Install package to root as well so dependency errors doesnt happen
     # because the dep is installed to destdir but not root.
     if destdir != "/" and not dirExists("/etc/kpkg/installed/"&package) and
             (not dontInstall):

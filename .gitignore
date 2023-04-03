@@ -1,6 +1,7 @@
 out
 packages
 src/kreastrap/kreastrap
-result
 archives
+# nix stuff
+result
 .direnv/
